@@ -15,10 +15,19 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import itertools
 from statistics import mean, median
 from pylab import rcParams
 
-names = ['Clump Thickness','Uniformity of Cell Size','Uniformity of Cell Shape','Marginal Adhesion ','Single Epithelial Cell Size','Bare Nuclei','Bland Chromatin','Normal Nucleoli','Mitoses', 'Class']
+names = ['Clump Thickness',
+         'Uniformity of Cell Size',
+         'Uniformity of Cell Shape',
+         'Marginal Adhesion',
+         'Single Epithelial Cell Size',
+         'Bare Nuclei','Bland Chromatin',
+         'Normal Nucleoli',
+         'Mitoses', 
+         'Class']
     
 def plotCorrelation(data):
     data.columns = names
@@ -52,6 +61,8 @@ def plotDensity(data):
         ax.grid('on')
     
     plt.show()
+    
+#def pairplot(data):
                         
 """
  Loads data from input and spliting it to two(70-30): Training Set(210) and Test 
@@ -63,11 +74,18 @@ def plotDensity(data):
 def loadDataSet(filename, split):
     # uses pandas library to read a tab-delimited text file from user input
     # headers are removed
-    data = pd.read_csv(filename, delimiter=',',header=None, usecols=range(1,11))
+    data = pd.read_csv(filename, delimiter=',',header=None, usecols=range(1,11),names=names)
     
     data = cleanData(data)
     
-    normalizedData = normalizeData(data)#, range(1,10)
+    normalizedData = normalizeData(data, ['Clump Thickness',
+                                          'Uniformity of Cell Size',
+                                          'Uniformity of Cell Shape',
+                                          'Marginal Adhesion',
+                                          'Single Epithelial Cell Size',
+                                          'Bare Nuclei','Bland Chromatin',
+                                          'Normal Nucleoli',
+                                          'Mitoses'])#, range(1,10)
     
     # Randomizes gpaDataSet and puts it back to gpaDataSet
     normalizedRandomData = normalizedData.sample(frac=1).reset_index(drop=True)
@@ -75,18 +93,19 @@ def loadDataSet(filename, split):
     
     # gpaDataSet is split depending on input a 70 on split gives 70-30.
     # trainingSet gets 70% and testSet get 30%
-    trainingSet, testSet = splitTrainTest(normalizedData,split)
+    trainingSet, testSet = splitTrainTest(normalizedRandomData,split)
     
-    return(data, normalizedData)
+    return(data, normalizedRandomData)
     
 def cleanData(data):
-    data[6] = pd.to_numeric(data[6].replace('?', data[6].replace(['?'], [None])))
-    colMeans = data[6].mean()
-    data[6] = data[6].fillna(int(colMeans))
-    for col in data[6]:
-        data[col] = data[col].astype(int)
+    data['Bare Nuclei'] = pd.to_numeric(data['Bare Nuclei'].replace('?', data['Bare Nuclei'].replace(['?'], [None])))
+    colMeans = data['Bare Nuclei'].mean()
+    data['Bare Nuclei'] = data['Bare Nuclei'].fillna(int(colMeans))
+    for col in data['Bare Nuclei']:
+#        data[col] = data[col].astype(int)
+        col = int(col)
     return data
-
+ 
 def normalizeData(data, normalizeColumns = None):
     if normalizeColumns == None:
         data  = (data - data.mean()) / data.std()
@@ -99,8 +118,8 @@ def splitTrainTest(data,split):
     trainingSet, testSet = np.split(data, [int(split*len(data))])
     
     # saves trainingSet and testSet into two text files
-    np.savetxt("AcenaTrainingSet.txt", trainingSet, fmt='%g', delimiter='\t')
-    np.savetxt("AcenaTestSet.txt", testSet, fmt='%g', delimiter='\t')
+    np.savetxt("AcenaTrainingSet.txt", trainingSet, fmt='%g', delimiter=',')
+    np.savetxt("AcenaTestSet.txt", testSet, fmt='%g', delimiter=',')
     
     return (trainingSet, testSet)
             
@@ -109,14 +128,30 @@ def splitTrainTest(data,split):
 #    for i in range(len(row)-1):
 #        yhat += coefficients.iloc[i+1,0] * row[i]
 #    return yhat
+    
+def sigmoid(cThickness, cSize, mAd, sSize, bNuc,bChroma, nNucleoli, mitoses, theta):
+    h = (1/(1+(np.exp(-1*(theta[0] + 
+                         (theta[1] * cThickness) + 
+                         (theta[2] * cSize) + 
+                         (theta[3] * mAd) + 
+                         (theta[4] * sSize) + 
+                         (theta[5] * bNuc) + 
+                         (theta[6] * bChroma) + 
+                         (theta[7] * nNucleoli) + 
+                         (theta[8] * mitoses)))))) 
+    return h 
 
-def hypothesisFunc(minutes, ounces, theta):
+def hypothesisFunc(cThickness, cSize, mAd, sSize, bNuc,bChroma, nNucleoli, mitoses, theta):
     return (theta[0] + 
-            (theta[1] * minutes) + 
-            (theta[2] * ounces) + 
-            (theta[3] * minutes * ounces) + 
-            (theta[4] * (minutes ** 2)) +
-            (theta[5] * (ounces ** 2)))   
+            (theta[1] * cThickness) + 
+            (theta[2] * cSize) + 
+            (theta[3] * mAd) + 
+            (theta[4] * sSize) + 
+            (theta[5] * bNuc) + 
+            (theta[6] * bChroma) + 
+            (theta[7] * nNucleoli) + 
+            (theta[8] * mitoses)) 
+ 
     
 def iterationsBestW(iterations, data, theta, alpha):
     costs = []
@@ -140,47 +175,65 @@ def updateTheta(data, theta, alpha):
         prevTheta = theta[w]
         
         tempTheta = 0
-        for i in range(len(data)):
-            minutes = data['studyMinutes'].iloc[i]
-            ounces  = data['ozBeer'].iloc[i]
-            gpa     = data['GPA'].iloc[i]
+        for i in range(len(data)): 
+            cThickness = data['Clump Thickness'].iloc[i]
+            cSize  = data['Uniformity of Cell Size'].iloc[i]
+            mAd  = data['Marginal Adhesion'].iloc[i]
+            sSize  = data['Single Epithelial Cell Size'].iloc[i]
+            bNuc  = data['Bare Nuclei'].iloc[i]
+            bChroma  = data['Bland Chromatin'].iloc[i]
+            nNucleoli  = data['Normal Nucleoli'].iloc[i]
+            mitoses  = data['Mitoses'].iloc[i]
+            class_bm     = data['Class'].iloc[i]
             
-            newX = getNewX(w, minutes,ounces)
-            print("theta: ", theta)
-            tempTheta += (hypothesisFunc(minutes, ounces, theta) - gpa) * newX
+            newX = getNewX(w, cThickness, cSize, mAd, sSize, bNuc,bChroma, nNucleoli, mitoses)
+#            print("theta: ", theta)
+            tempTheta += (hypothesisFunc(cThickness, cSize, mAd, sSize, bNuc,bChroma, nNucleoli, mitoses, theta) - class_bm) * newX
         
         newTheta =  prevTheta - alpha * (1/m) * tempTheta
 
         thetaUpdated[w] = newTheta
-    print(thetaUpdated)
+#    print(thetaUpdated)
     return thetaUpdated 
 
-def getNewX(theta, minutes, ounces):
+def getNewX(theta, cThickness, cSize, mAd, sSize, bNuc,bChroma, nNucleoli, mitoses):
     if theta == 0:
         return 1
     elif theta == 1:
-        return float(minutes)
+        return float(cThickness)
     elif theta == 2:
-        return float(ounces)
+        return float(cSize)
     elif theta == 3:
-        return float(minutes * ounces)
+        return float(mAd)
     elif theta == 4:
-        return float(minutes ** 2)
+        return float(sSize)
     elif theta == 5:
-        return float(ounces ** 2)
+        return float(bNuc)
+    elif theta == 6:
+        return float(bChroma)
+    elif theta == 7:
+        return float(nNucleoli)
+    elif theta == 8:
+        return float(mitoses)
 
 def getJCostByTheta(data, theta):
     cost = 0
     m = len(data)
     for i in range(len(data)):
-        minutes = data['studyMinutes'].iloc[i]
-        ounces  = data['ozBeer'].iloc[i]
-        gpa     = data['GPA'].iloc[i]
+        cThickness = data['Clump Thickness'].iloc[i]
+        cSize  = data['Uniformity of Cell Size'].iloc[i]
+        mAd  = data['Marginal Adhesion'].iloc[i]
+        sSize  = data['Single Epithelial Cell Size'].iloc[i]
+        bNuc  = data['Bare Nuclei'].iloc[i]
+        bChroma  = data['Bland Chromatin'].iloc[i]
+        nNucleoli  = data['Normal Nucleoli'].iloc[i]
+        mitoses  = data['Mitoses'].iloc[i]
+        class_bm     = data['Class'].iloc[i]
 
-        cost += ((hypothesisFunc(minutes, ounces, theta) - gpa) ** 2)
+        cost += ((hypothesisFunc(cThickness, cSize, mAd, sSize, bNuc,bChroma, nNucleoli, mitoses, theta) - class_bm) ** 2)
     
 #    print(theta)
-    print("J: " + repr((1/(2*m) * cost)))
+#    print("J: " + repr((1/(2*m) * cost)))
   
     return ((1/(2 * m))*cost)
 
@@ -194,14 +247,24 @@ def jCostPlot(iteration, costs):
     return
 
 def getPredictions(data, theta):
+    threshold = 2.5
     predictions = []
     for i in range(len(data)):
-        minutes = data['studyMinutes'].iloc[i]
-        ounces  = data['ozBeer'].iloc[i]
-        gpa     = hypothesisFunc(minutes, ounces, theta)
+        cThickness = data['Clump Thickness'].iloc[i]
+        cSize  = data['Uniformity of Cell Size'].iloc[i]
+        mAd  = data['Marginal Adhesion'].iloc[i]
+        sSize  = data['Single Epithelial Cell Size'].iloc[i]
+        bNuc  = data['Bare Nuclei'].iloc[i]
+        bChroma  = data['Bland Chromatin'].iloc[i]
+        nNucleoli  = data['Normal Nucleoli'].iloc[i]
+        mitoses  = data['Mitoses'].iloc[i]
+        gpa     = hypothesisFunc(cThickness, cSize, mAd, sSize, bNuc,bChroma, nNucleoli, mitoses, theta)
+        if gpa <= threshold:
+            predictions.append(2)
+        else:
+            predictions.append(4)
         
-        predictions.append(gpa)
-    actualGPA    = pd.DataFrame({'Actual GPA':data['GPA']})
+    actualGPA    = pd.DataFrame({'Actual GPA':data['Class']})
     predictionGPA = pd.DataFrame({'Predicted GPA':predictions})
     comparisonGPA = pd.concat([actualGPA, predictionGPA],axis=1)
     return comparisonGPA
@@ -268,6 +331,66 @@ def test(data, theta):
     meanData, stdData = meansAndStd(data) 
     userInputs(theta, meanData, stdData)
     
+def divider():
+    print("==================================================================")
+
+def confusionMatrix(y,outcome):
+    f1_score = k = tp = fp = fn = tn = 0
+    for i in range(len(outcome)):
+        if outcome[i] == y[i]:
+            k = k + 1
+        if outcome[i] == y[i] == 2:
+            tp = tp + 4
+        if outcome[i] == 2 and y[i] == 4:
+            fp = fp + 1
+        if outcome[i] == 4 and y[i] == 2:
+            fn = fn + 1
+        if (outcome[i] == y[i] == 4):
+            tn = tn + 1
+            
+    accuracy = k/len(y)
+    precision = tp/(tp + fp)
+    recall = tp/(tp + fn)
+    f1_score = (2 * precision * recall)/(precision + recall)
+            
+    cm = np.array([[tp, fn], [fp, tn]])
+    
+    print("True Positive: ", tp)
+    print("True Negative: ", tn)
+    print("False Positive: ", fp)
+    print("False Negative: ", fn)
+    print("Recall: ", recall)
+    print("precision: ", precision)
+    print("Accuracy: ", accuracy)
+    print("F1 Score: ", f1_score)
+    
+        # Un-Normalized Confusion Matrix...
+    plotConfusionMatrix(cm, classes=[0,1])
+
+    
+def plotConfusionMatrix(cm, classes):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    cmap = plt.cm.Blues
+    print('Confusion matrix, without normalization')
+#    print(cm)
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title("Confusion Matrix")
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+    thresh = cm.max() / 2.
+        
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j]),horizontalalignment="center",color="white" if cm[i, j] > thresh else "black")
+    
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.show()
 
 def main():
     print("""
@@ -278,27 +401,40 @@ def main():
     filename = "breast-cancer-wisconsin.data"
     split = 0.80
     alpha = .1
-    theta = [1,1,1,1,1,1]
+    theta = [1,1,1,1,1,1,1,1,1]
     jVal = 0.0
     iterations = 60
     
     dataset, normalizedData = loadDataSet(filename,split)
     
-    plotCorrelation(normalizedData.iloc[:,0:10])
+    y_target = normalizedData['Class']
     
-    plotDensity(dataset)
+    normalizedData['target'] = normalizedData['Class'].map({2:'B',4:'M'}) 
+    
+#    print(y_target)    
+    
+#    plotCorrelation(normalizedData.iloc[:,0:10])
+#    
+#    plotDensity(dataset)
     
 #    print(dataSet)
     
-#    trainSet = pd.read_csv("AcenaTrainingSet.txt", delimiter='\t', header=None,
-#                           names=['studyMinutes',
-#                                'ozBeer',
-#                                'GPA'])
-#    testSet = pd.read_csv("AcenaTestSet.txt", delimiter='\t', header=None,
-#                           names=['studyMinutes',
-#                                'ozBeer',
-#                                'GPA'])
+    trainSet = pd.read_csv("AcenaTrainingSet.txt", delimiter=',', header=None,
+                           names=names)
+    testSet = pd.read_csv("AcenaTestSet.txt", delimiter=',', header=None,
+                           names=names)
     
+    theta, jVal = iterationsBestW(iterations, trainSet, theta, alpha)
+##    print(theta)
+##    print (jVal)
+#    
+    divider()
+    
+    comparisonGPA = getPredictions(testSet, theta)
+    confusionMatrix(comparisonGPA['Actual GPA'], comparisonGPA['Predicted GPA'])
+    values(theta,jVal,testSet)
+    print(jVal)
+    print(theta)
 #    while True:
 #        print("""
 #            ==============================================================
